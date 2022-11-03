@@ -13,3 +13,6 @@
       system_name: "{{ server_name }}"
       vm_name: "{{ inventory_hostname }}"
       state: facts
+    register: lpar_facts
+  - debug:
+      var: lpar_facts
