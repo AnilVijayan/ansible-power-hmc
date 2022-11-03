@@ -3,9 +3,8 @@ hmc_hosts:
   "9.3.84.221":
     user: "hscroot"
     password: "abc123"
-# Filter on only AIX/Linux hosts
-filters:
-    PartitionType: 'AIX/Linux'
-# Compose the managed System URL to obtain frame name
 compose:
-  systemname_url: AssociatedManagedSystem
+  server_name: SystemName
+keyed_groups:
+  - prefix: "server_group_"
+    key: SystemName
