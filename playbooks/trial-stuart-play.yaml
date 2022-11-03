@@ -1,0 +1,15 @@
+---
+- name: HMC create and activate logical partition
+  hosts: f5-AIX1
+  collections:
+      - ibm.power_hmc
+  connection: local
+  tasks:
+  - powervm_lpar_instance:
+      hmc_host: "9.3.84.221"
+      hmc_auth:
+        username: hscroot
+        password: abc123
+      system_name: "{{ server_name }}"
+      vm_name: "{{ inventory_hostname }}"
+      state: facts
