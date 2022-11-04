@@ -1,0 +1,27 @@
+---
+- name: HMC create and activate logical partition
+  hosts: hmcs
+  collections:
+      - ibm.power_hmc
+  connection: local
+  vars:
+    hmc_inventory_template: 'template.yaml'
+    LPAR_Inventory_File: 'inv.power_hmc.yml'
+    LPAR_Inventory_Output: 'output.yml'
+    primary_hmc: '9.3.84.221'
+  tasks:
+  - name: Create LPAR Inventory file from template
+    template:
+      src={{ hmc_inventory_template }}
+      dest={{ LPAR_Inventory_File }}
+  - name: "Gather LPAR Inventory data from HMC into a file"
+    command: "ansible-inventory -i {{ LPAR_Inventory_File }} --list --output {{ LPAR_Inventory_Output }}"
+    delegate_to: localhost
+    connection: local
+    register: Inventory_Output
+  - name: Load Facts from LPAR Inventory file
+    include_vars:
+      file: "{{ LPAR_Inventory_Output }}"
+      name: LPAR_Inventory
+  - debug:
+      var: LPAR_Inventory
