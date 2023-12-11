@@ -43,4 +43,7 @@ jobs:
     - name: run document generator script
       run: |
         ansible --version
+        python --version
+        python3 --version
+        pip freeze
         bash devops/bin/gen_doc.sh
