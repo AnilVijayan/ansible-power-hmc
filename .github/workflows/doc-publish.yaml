@@ -46,5 +46,6 @@ jobs:
         python --version
         python3 --version
         pip freeze
+        ansible
         ansible-doc-extractor
         bash devops/bin/gen_doc.sh
