@@ -22,6 +22,7 @@ DOC_TEMPLATE="$DIR/docs/templates/module.rst.j2"
 [[ ! -d $DOC_SRC_DIR/modules ]] && mkdir -p $DOC_SRC_DIR/modules && mkdir -p $DOC_SRC_DIR/plugins
 [[ ! -d $DOC_BLD_DIR ]] && mkdir -p $DOC_BLD_DIR
 #ansible-doc-extractor $DOC_SRC_DIR/modules $MODULE_DIR/*.py
+ansible
 ansible-doc-extractor $DIR/docs/source/modules /home/runner/work/ansible-power-hmc/ansible-power-hmc/plugins/modules/firmware_update.py
 ansible-doc-extractor $DOC_SRC_DIR/plugins $INV_PLUGIN_DIR/*.py
 sphinx-build -b html $DOC_SRC_DIR $DOC_BLD_DIR

@@ -42,6 +42,7 @@ jobs:
         
     - name: run document generator script
       run: |
+        pip install .[core]
         ansible --version
         python --version
         python3 --version
