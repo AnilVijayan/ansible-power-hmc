@@ -23,7 +23,7 @@ description:
     - Generic module that can execute any HMC CLI command
     - The given command will be executed on all selected HMC
     - Information about the HMC CLI commands can be found in the https://www.ibm.com/docs/en/power10/7063-CR1?topic=hmc-commands
-version_added: 1.0.1
+version_added: 1.0.0
 options:
     hmc_host:
         description:
@@ -47,7 +47,7 @@ options:
                 type: str
     cmd:
         description:
-            - The command to be executed on HMC.
+            - The command to be executed on HMC. Testing
         required: true
         type: str
 '''
