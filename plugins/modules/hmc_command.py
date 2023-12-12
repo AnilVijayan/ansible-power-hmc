@@ -47,7 +47,7 @@ options:
                 type: str
     cmd:
         description:
-            - The command to be executed on HMC. Testing
+            - The command to be executed on HMC.
         required: true
         type: str
 '''
