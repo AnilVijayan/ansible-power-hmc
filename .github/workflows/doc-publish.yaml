@@ -54,6 +54,9 @@ jobs:
     environment:
       name: github-pages
       url: https://AnilVijayan.github.io/ansible-power-hmc
+    permissions:
+      id-token: write
+      pages: write
 
     steps:
     - uses: actions/download-artifact@v3
@@ -69,3 +72,5 @@ jobs:
         path: .
     - id: deployment
       uses: actions/deploy-pages@v3
+      with:
+        token: ${{ secrets.TOKEN_ANILVIJAYAN }}
