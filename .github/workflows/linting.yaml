@@ -19,9 +19,6 @@ jobs:
   ########################################################################
   module-linting-test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ansible_collections/ibm/power_hmc
     strategy:
       matrix:
         ansible-version: ['2.9']
@@ -42,6 +39,7 @@ jobs:
         python -m pip install --upgrade pip
         make install-ansible ANSIBLE_VERSION=${{ matrix.ansible-version }}
         make install-sanity-test-requirements
+        working-directory: ~/.ansible/collections/ansible_collections/ibm/power_hmc
 
     - name: run pep8 coding style linter
       run: |
