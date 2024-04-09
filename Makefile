@@ -88,7 +88,7 @@ install-unit-test-requirements:
 lint: module-lint
 
 .PHONY: module-lint
-module-lint: prep-collection
+module-lint:
 	ansible-test sanity --python $(PYTHON_VERSION) --skip-test shebang
 	flake8 plugins/modules/* --max-line-length=160 --ignore=E402,W503 
 	flake8 plugins/module_utils/* --max-line-length=160 --ignore=E402,W503
@@ -102,5 +102,5 @@ prep-collection:
 
 .PHONY: unit-test
 unit-test: prep-collection
-	cd /home/runner/.ansible/collections/; \
+	cd ~/.ansible/collections/; \
 	python -m pytest
