@@ -28,7 +28,7 @@ jobs:
     name: run module linting
     steps:
     - name: checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       
     - name: setup python
       uses: actions/setup-python@v2
@@ -40,7 +40,6 @@ jobs:
         python -m pip install --upgrade pip
         make install-ansible ANSIBLE_VERSION=${{ matrix.ansible-version }}
         make install-sanity-test-requirements
-        working-directory: ~/.ansible/collections/ansible_collections/ibm/power_hmc
 
     - name: build and install new content as collection
       run: |

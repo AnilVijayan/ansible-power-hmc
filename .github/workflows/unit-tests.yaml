@@ -23,7 +23,7 @@ jobs:
     name: running unit tests with python ${{ matrix.python-version }}
     steps:
     - name: checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       
     - name: setup python
       uses: actions/setup-python@v2
@@ -40,6 +40,4 @@ jobs:
         
     - name: run unit tests
       run: |
-        pwd
-        ls -l
         make unit-test PYTHON_VERSION=${{ matrix.python-version }}
