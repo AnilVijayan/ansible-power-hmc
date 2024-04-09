@@ -46,6 +46,5 @@ jobs:
         make prep-collection
 
     - name: run pep8 coding style linter
-      run: |
-        make module-lint
-        working-directory: ~/.ansible/collections/ansible_collections/ibm/power_hmc
+      run: make module-lint
+      working-directory: ~/.ansible/collections/ansible_collections/ibm/power_hmc
