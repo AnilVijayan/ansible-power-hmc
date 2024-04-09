@@ -102,7 +102,7 @@ prep-collection:
 
 .PHONY: unit-test
 unit-test: prep-collection
-	cd ~/.ansible/collections/
+	cd /home/runner/.ansible/collections/
 	pwd
 	ls
 	python -m pytest
