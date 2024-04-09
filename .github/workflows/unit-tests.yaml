@@ -15,9 +15,6 @@ on:
 jobs:
   unit-test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ansible_collections/ibm/power_hmc
     strategy:
       matrix:
         ansible-version: ['2.9']
