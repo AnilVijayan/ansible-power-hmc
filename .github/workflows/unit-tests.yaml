@@ -24,8 +24,6 @@ jobs:
     steps:
     - name: checkout repository
       uses: actions/checkout@v2
-      with:
-        path: ansible_collections/ibm/power_hmc
       
     - name: setup python
       uses: actions/setup-python@v2
