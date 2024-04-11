@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ansible-version: ['2.9']
+        ansible-version: ['2.11']
         python-version: ['3.7']
 
     name: run module linting
