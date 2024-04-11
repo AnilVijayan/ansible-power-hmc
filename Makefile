@@ -74,6 +74,7 @@ install-ansible-devel-branch:
 .PHONY: install-sanity-test-requirements
 install-sanity-test-requirements:
 	python -m pip install -r tests/sanity/sanity.requirements
+	pip3 install rstcheck
 
 .PHONY: install-unit-test-requirements
 install-unit-test-requirements:
