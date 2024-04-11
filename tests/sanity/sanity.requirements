@@ -1,10 +1,11 @@
-pycodestyle
-pylint==2.13.*
-six
-voluptuous
-yamllint
 flake8
-ansible-lint==5.2.1
-rich==10.*
-shellcheck-py
+wheel       # for ansible-test
+Jinja2      # for ansible-test
+pyyaml     # for ansible-test
+voluptuous # for ansible-test
+pyyaml      # for compile test with Python2
+pylint     # for ansible-test
+yamllint    # for ansible-test
+pytest      # for pytest
+pytest-mock # for pytest
 rstcheck
