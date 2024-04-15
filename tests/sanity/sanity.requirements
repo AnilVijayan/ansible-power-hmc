@@ -4,7 +4,7 @@ Jinja2      # for ansible-test
 pyyaml     # for ansible-test
 voluptuous # for ansible-test
 pyyaml      # for compile test with Python2
-pylint==2.13.*
+pylint
 yamllint    # for ansible-test
 pytest      # for pytest
 pytest-mock # for pytest
