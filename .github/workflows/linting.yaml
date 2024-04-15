@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.10', '3.11']
+        python-version: ['3.8', '3.10', '3.11']
 
     name: run module linting
     steps:
@@ -36,6 +36,8 @@ jobs:
         
     - name: install linting test requirements
       run: |
+        echo "$GITHUB_REPOSITORY_OWNER"
+        echo "$REPO_OWNER_ID"
         python -m pip install --upgrade pip
         make install-ansible
         make install-sanity-test-requirements
