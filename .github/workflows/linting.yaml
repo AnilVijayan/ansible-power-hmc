@@ -36,8 +36,8 @@ jobs:
         
     - name: install linting test requirements
       run: |
-        echo "$GITHUB_REPOSITORY_OWNER"
-        echo "$REPO_OWNER_ID"
+        echo "GITHUB_REPOSITORY_OWNER: $GITHUB_REPOSITORY_OWNER"
+        echo "REPO_OWNER_ID: $REPO_OWNER_ID"
         python -m pip install --upgrade pip
         make install-ansible
         make install-sanity-test-requirements
