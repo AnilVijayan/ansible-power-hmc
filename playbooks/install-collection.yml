@@ -1,0 +1,12 @@
+
+# install_collections.yml
+---
+- name: Install Ansible collections on control node
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Install collections
+      ansible.builtin.command:
+        cmd: >
+          ansible-galaxy collection install ibm.power_hmc
+
