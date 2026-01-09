@@ -6,9 +6,9 @@
   gather_facts: false
   tasks:
     - name: Install collections
-      ansible.builtin.command:
-        cmd: >
+      ansible.builtin.shell: |
           uname -a
+          cat /etc/*release*
       register: data
 
     - debug:
