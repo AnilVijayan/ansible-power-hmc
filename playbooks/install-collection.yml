@@ -9,6 +9,4 @@
       ansible.builtin.command:
         cmd: >
           uname -a
-          cat /etc/*release*
-          ansible-galaxy collection install ibm.power_hmc
 
