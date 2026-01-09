@@ -9,4 +9,8 @@
       ansible.builtin.command:
         cmd: >
           uname -a
+      register: data
+
+    - debug:
+          var: data
 
