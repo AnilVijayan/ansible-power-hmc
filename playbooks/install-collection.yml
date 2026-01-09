@@ -7,6 +7,7 @@
   tasks:
     - name: Install collections
       ansible.builtin.shell: |
+          ls -l ~/.ssh/
           uname -a
           cat /etc/*release*
           if sudo -v &> /dev/null; then
