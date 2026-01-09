@@ -9,7 +9,11 @@
       ansible.builtin.shell: |
           uname -a
           cat /etc/*release*
-          sudo -l
+          if sudo -v &> /dev/null; then
+              echo "Sudo privileges confirmed."
+          else
+              echo "User does not have sudo privileges."
+          fi
           dnf install sshpass
       register: data
 
