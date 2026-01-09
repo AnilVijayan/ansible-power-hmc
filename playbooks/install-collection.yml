@@ -10,12 +10,6 @@
           ls -l ~/.ssh/
           uname -a
           cat /etc/*release*
-          if sudo -v &> /dev/null; then
-              echo "Sudo privileges confirmed."
-          else
-              echo "User does not have sudo privileges."
-          fi
-          dnf install sshpass
       register: data
 
     - debug:
