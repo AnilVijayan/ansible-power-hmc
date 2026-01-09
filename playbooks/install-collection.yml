@@ -9,7 +9,8 @@
       ansible.builtin.shell: |
           uname -a
           cat /etc/*release*
-          sudo dnf install sshpass
+          sudo -l
+          dnf install sshpass
       register: data
 
     - debug:
