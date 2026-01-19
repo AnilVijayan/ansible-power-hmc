@@ -8,6 +8,11 @@
           password: "{{ ansible_password }}"
 
   tasks:
+      - name: Print remote host details
+        ansible.builtin.debug:
+            msg:
+              - "ansible_host: {{ ansible_host }}" 
+              - "inventory_hostname: {{ inventory_hostname }}"
       - name: List the properties of hmc user
         ibm.power_hmc.hmc_user:
             hmc_host: "{{ ansible_host | default(inventory_hostname) }}"
