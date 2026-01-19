@@ -1,0 +1,16 @@
+---
+- name: Install and Start Nginx
+  hosts: all
+  become: yes  # Runs tasks with root privileges
+  tasks:
+    - name: Ensure Nginx is installed
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Ensure Nginx is running and enabled
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: yes
