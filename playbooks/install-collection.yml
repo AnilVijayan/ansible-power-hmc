@@ -10,6 +10,7 @@
           ls -l ~/.ssh/
           uname -a
           cat /etc/*release*
+          ansible-galaxy collection install ibm.power_hmc
       register: data
 
     - debug:
