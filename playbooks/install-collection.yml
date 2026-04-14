@@ -24,7 +24,7 @@
     - debug:
           var: collection_data
 
-   - name: Setup lxml
+    - name: Setup lxml
       ansible.builtin.shell: |
           pip install lxml
       register: lxml_status
