@@ -16,3 +16,12 @@
     - debug:
           var: data
 
+    - name: check the galaxy level
+      ansible.builtin.shell: |
+          ansible-galaxy collection list
+      register: collection_data
+
+    - debug:
+          var: collection_data
+      
+
