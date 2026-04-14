@@ -13,7 +13,6 @@
 
     - name: Install collections
       ansible.builtin.shell: |
-          sudo dnf install sshpass
           ls -l ~/.ssh/
           uname -a
           cat /etc/*release*
