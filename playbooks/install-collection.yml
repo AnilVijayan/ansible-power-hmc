@@ -4,7 +4,13 @@
 - name: Install Ansible collections on control node
   hosts: localhost
   gather_facts: false
+  become: yes
   tasks:
+    - name: Install package using dnf
+      dnf:
+          name: sshpass
+          state: latest
+
     - name: Install collections
       ansible.builtin.shell: |
           sudo dnf install sshpass
