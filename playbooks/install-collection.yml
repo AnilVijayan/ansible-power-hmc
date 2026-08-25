@@ -18,6 +18,7 @@
       dnf:
           name: sshpass
           state: latest
+          disable_gpg_check: true
 
     - name: Install collections
       ansible.builtin.shell: |
