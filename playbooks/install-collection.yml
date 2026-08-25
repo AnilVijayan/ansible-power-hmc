@@ -4,7 +4,7 @@
 - name: Install Ansible collections on control node
   hosts: localhost
   gather_facts: false
-  become: yes
+  #become: yes
   tasks:
     - name: Print current user
       ansible.builtin.command: whoami
