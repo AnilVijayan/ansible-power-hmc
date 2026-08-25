@@ -6,6 +6,14 @@
   gather_facts: false
   become: yes
   tasks:
+    - name: Print current user
+      ansible.builtin.command: whoami
+      register: current_user
+
+    - name: Display current user
+      debug:
+        var: current_user.stdout
+        
     - name: Install package using dnf
       dnf:
           name: sshpass
