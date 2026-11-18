@@ -1,0 +1,472 @@
+---
+- name: Validate required PMC PAO installation parameters
+  ansible.builtin.assert:
+    that:
+      - pmc_pao_install_repo_dir | length > 0
+      - pmc_pao_install_host_ip | length > 0
+      - pmc_pao_install_host_gw | length > 0
+      - pmc_pao_install_host_subnet | length > 0
+      - pmc_pao_install_host_netmask | length > 0
+      - pmc_pao_install_dns_ip | length > 0
+      - pmc_pao_install_hostname | length > 0
+      - pmc_pao_install_lpar_name | length > 0
+      - pmc_pao_install_managed_system | length > 0
+      - pmc_pao_install_host_password | length > 0
+    fail_msg: >-
+      One or more required pmc_pao_install_* variables are empty. The appliance
+      password (pmc_pao_install_host_password) must be supplied by the caller,
+      e.g. from an environment variable via lookup('ansible.builtin.env', ...).
+  run_once: true
+  delegate_to: localhost
+
+- name: Create new lpar
+  run_once: true
+  connection: local
+  collections:
+      - ibm.power_hmc
+  powervm_lpar_instance:
+      hmc_host: "{{ hostvars['hmc_server'].ansible_host }}"
+      hmc_auth: '{{ pmc_pao_install_curr_hmc_auth }}'
+      system_name: "{{ pmc_pao_install_managed_system }}"
+      vm_name: "{{ pmc_pao_install_lpar_name }}"
+      os_type: linux
+      proc: "{{ pmc_pao_install_proc }}"
+      mem: "{{ pmc_pao_install_mem }}"
+      virt_network_config:
+          - network_name: "{{ pmc_pao_install_network_name }}"
+      volume_config:
+          - volume_size: "{{ pmc_pao_install_disk_size }}"
+      state: present
+  delegate_to: "{{ groups['hmcs'][0] }}"
+
+- name: Facts of the partition
+  run_once: true
+  connection: local
+  collections:
+      - ibm.power_hmc
+  powervm_lpar_instance:
+      hmc_host: "{{ hostvars['hmc_server'].ansible_host }}"
+      hmc_auth: '{{ pmc_pao_install_curr_hmc_auth }}'
+      system_name: "{{ pmc_pao_install_managed_system }}"
+      vm_name: "{{ pmc_pao_install_lpar_name }}"
+      advanced_info: true
+      state: facts
+  register: pmc_pao_install_facts_output
+  delegate_to: "{{ groups['hmcs'][0] }}"
+
+- name: Find MAC address for specific network
+  ansible.builtin.set_fact:
+      pmc_pao_install_mac_address: "{{ item.mac_address }}"
+  when: item.virtual_network_name == pmc_pao_install_network_name
+  loop: "{{ pmc_pao_install_facts_output.partition_info.VirtualNetworkAdapters }}"
+
+- name: Fail if MAC address is empty
+  ansible.builtin.fail:
+      msg: "MAC address not found for network: {{ pmc_pao_install_network_name }}"
+  when: pmc_pao_install_mac_address is not defined or pmc_pao_install_mac_address | length == 0
+
+- name: Convert MAC address in colon format from fact variable
+  ansible.builtin.set_fact:
+      pmc_pao_install_hardware_ethernet: "{{ pmc_pao_install_mac_address | regex_replace('(..)(..)(..)(..)(..)(..)', '\\1:\\2:\\3:\\4:\\5:\\6') }}"
+
+- name: Convert MAC address from in hyphen format from fact variable
+  ansible.builtin.set_fact:
+      pmc_pao_install_address: "{{ pmc_pao_install_mac_address | regex_replace('(..)(..)(..)(..)(..)(..)', '\\1-\\2-\\3-\\4-\\5-\\6') }}"
+
+- name: Gather facts and service facts from PXE server
+  run_once: true
+  delegate_to: "{{ groups['pxe'][0] }}"
+  block:
+      - name: Gather setup facts
+        ansible.builtin.setup:
+        delegate_facts: true
+
+      - name: Gather service facts
+        ansible.builtin.service_facts:
+
+- name: Check if the pxe server has dhcp and tftp services running
+  run_once: true
+  ansible.builtin.set_fact:
+      pmc_pao_install_dhcpd_running: "{{ 'dhcpd.service' in services and services['dhcpd.service'].state == 'running' }}"
+      pmc_pao_install_tftp_running: >-
+        {{ ('tftp.service' in services and services['tftp.service'].state == 'running') or
+          ('xinetd.service' in services and services['xinetd.service'].state == 'running') }}
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Install dhcp in pxe server
+  when:
+      - pmc_pao_install_enable_dhcp | bool
+      - not pmc_pao_install_dhcpd_running
+  block:
+      - name: Install dhcp in pxe server
+        ansible.builtin.dnf:
+            name:
+                - dhcp-server
+            state: present
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Calculate DHCP range from IP using bash only
+        ansible.builtin.shell: |
+            set -o pipefail
+            network="{{ pmc_pao_install_host_subnet }}"
+            netmask="{{ pmc_pao_install_host_netmask }}"
+
+            ip_to_dec() {
+            IFS=. read -r a b c d <<< "$1"
+            echo $(( (a << 24) + (b << 16) + (c << 8) + d ))
+            }
+
+            dec_to_ip() {
+            a=$(( ($1 >> 24) & 255 ))
+            b=$(( ($1 >> 16) & 255 ))
+            c=$(( ($1 >> 8) & 255 ))
+            d=$(( $1 & 255 ))
+            echo "$a.$b.$c.$d"
+            }
+
+            net_dec=$(ip_to_dec "$network")
+            mask_dec=$(ip_to_dec "$netmask")
+            broadcast_dec=$(( net_dec | (~mask_dec & 0xFFFFFFFF) ))
+
+            start_dec=$(( net_dec + 10 ))
+            end_dec=$(( broadcast_dec - 1 - 1 ))  # second-to-last usable
+
+            start_ip=$(dec_to_ip "$start_dec")
+            end_ip=$(dec_to_ip "$end_dec")
+
+            echo "dhcp_range_start=$start_ip"
+            echo "dhcp_range_end=$end_ip"
+        register: pmc_pao_install_dhcp_range_output
+        changed_when: false
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Set DHCP range facts
+        ansible.builtin.set_fact:
+            pmc_pao_install_dhcp_range_start: >-
+              {{ pmc_pao_install_dhcp_range_output.stdout_lines
+                | select('search', '^dhcp_range_start=')
+                | first
+                | regex_replace('^dhcp_range_start=', '') }}
+
+            pmc_pao_install_dhcp_range_end: >-
+              {{ pmc_pao_install_dhcp_range_output.stdout_lines
+                | select('search', '^dhcp_range_end=')
+                | first
+                | regex_replace('^dhcp_range_end=', '') }}
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Add block for dhcp configuration
+        run_once: true
+        ansible.builtin.template:
+            src: templates/dhcp_server_conf.j2
+            dest: "/etc/dhcp/dhcpd.conf"
+            owner: root
+            group: root
+            mode: '0644'
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Enable and start dhcp-server
+        ansible.builtin.systemd:
+            name: dhcpd
+            state: started
+            enabled: true
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Open DHCP ports in firewall
+        ansible.posix.firewalld:
+            service: dhcp
+            permanent: true
+            state: enabled
+            immediate: true
+        when: "'firewalld.service' in services and services['firewalld.service'].state == 'running'"
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Install tftp in pxe server
+  when: not pmc_pao_install_tftp_running
+  block:
+      - name: Install tftp in pxe server
+        ansible.builtin.dnf:
+            name: tftp-server
+            state: present
+            use_backend: dnf4
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Ensure TFTP root directory exists
+        ansible.builtin.file:
+            path: /var/lib/tftpboot
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Enable and start tftp-socket
+        ansible.builtin.systemd:
+            name: tftp.socket
+            state: started
+            enabled: true
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Enable and start tftp-server
+        ansible.builtin.systemd:
+            name: tftp.service
+            state: started
+            enabled: true
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Install grub2-tools-extra and wget package in pxe server
+        ansible.builtin.dnf:
+            name: grub2-tools-extra
+            state: present
+            use_backend: dnf4
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Install wget package in pxe server
+        ansible.builtin.dnf:
+            name: wget
+            state: present
+            use_backend: dnf4
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+      - name: Open TFTP ports in firewall
+        ansible.posix.firewalld:
+            service: tftp
+            permanent: true
+            state: enabled
+            immediate: true
+        when: "'firewalld.service' in services and services['firewalld.service'].state == 'running'"
+        delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Create Kickstart file name
+  ansible.builtin.set_fact:
+      pmc_pao_install_ks_file: "{{ pmc_pao_install_distro | regex_replace('\\.', '') }}_{{ pmc_pao_install_hardware_ethernet }}.ks"
+
+- name: Fetch ks.cfg shipped with the PMC ISO
+  ansible.builtin.uri:
+      url: "http://{{ hostvars[groups['repo'][0]].ansible_host }}:{{ pmc_pao_install_repo_port }}/{{ pmc_pao_install_repo_dir }}/ks.cfg"
+      method: GET
+      return_content: true
+      status_code:
+          - 200
+          - 404
+  register: pmc_pao_install_iso_ks_check
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if the PMC ISO does not ship ks.cfg
+  ansible.builtin.assert:
+    that: pmc_pao_install_iso_ks_check.status == 200
+    fail_msg: "ks.cfg not found at {{ pmc_pao_install_repo_dir }}/ks.cfg on the repository server. Verify pmc_pao_install_repo_dir points to an extracted PMC ISO."
+  run_once: true
+  delegate_to: localhost
+
+- name: Translate PMC ISO Kickstart and deploy to Repository Server
+  run_once: true
+  vars:
+      _repo_base: "http://{{ hostvars[groups['repo'][0]].ansible_host }}:{{ pmc_pao_install_repo_port }}/{{ pmc_pao_install_repo_dir }}"
+      _net_line: "network --bootproto=static --ip={{ pmc_pao_install_host_ip }} --netmask={{ pmc_pao_install_host_netmask }} --gateway={{ pmc_pao_install_host_gw }} --nameserver={{ pmc_pao_install_dns_ip }} --hostname={{ pmc_pao_install_hostname }} --device={{ pmc_pao_install_hardware_ethernet }} --activate --onboot=yes"
+      _nochroot_replacement: |
+        %post --nochroot --log=/root/anaconda-post.log
+        set -x
+        SYSROOT=/mnt/sysroot
+
+        echo "Installing IBM RSCT packages into ${SYSROOT}..."
+        dnf install -y --nogpgcheck --installroot=${SYSROOT} --releasever=10 --setopt=reposdir= --repofrompath=local-rsct,{{ _repo_base }}/RSCT/ --repofrompath=local-baseos,{{ _repo_base }}/BaseOS/ --repofrompath=local-appstream,{{ _repo_base }}/AppStream/ --setopt=strict=0 rsct.basic rsct.core rsct.core.utils rsct.opt.storagerm src DynamicRM devices.chrp.base.ServiceRM || true
+
+        mkdir -p "${SYSROOT}/etc/systemd/system/multi-user.target.wants"
+        UNIT_DST="${SYSROOT}/etc/systemd/system/configure-poweriq-agentic.service"
+        curl -s -L -o "$UNIT_DST" "{{ _repo_base }}/postinstallation-scripts/configure-poweriq-agentic.service" 2>/dev/null || true
+        chmod 644 "$UNIT_DST" 2>/dev/null || true
+        ln -sf /etc/systemd/system/configure-poweriq-agentic.service "${SYSROOT}/etc/systemd/system/multi-user.target.wants/configure-poweriq-agentic.service" 2>/dev/null || true
+        %end
+      _chroot_hook: |
+        [ -c /dev/nvram ] || mknod /dev/nvram c 10 144 2>/dev/null || true
+        chmod 600 /dev/nvram 2>/dev/null || true
+        bootlist -m both sda || bootlist -m normal sda || true
+        nvram --update-config "auto-boot?=true" 2>/dev/null || true
+      _raw_ks: "{{ pmc_pao_install_iso_ks_check.content }}"
+      _step_repos: "{{ _raw_ks | replace('file:///run/install/repo/', _repo_base ~ '/') | regex_replace('(?m)^[ \\t]*cdrom', 'url --url=\"' ~ _repo_base ~ '/BaseOS\"') }}"
+      _step_net: "{{ _step_repos | regex_replace('(?m)^[ \\t]*network[ \\t]+--bootproto=.*$', _net_line) }}"
+      _step_post: "{{ _step_net | regex_replace('(?s)%post --nochroot.*?%end', _nochroot_replacement) | regex_replace('(?s)BOOT_DEVICE=.*?\nfi\b', _chroot_hook) }}"
+      _step_console: "{{ _step_post | regex_replace('(?m)^[ \\t]*exec\\s*<\\s*/dev/tty\\d+.*$', '# exec < /dev/tty') | regex_replace('(?m)^[ \\t]*chvt\\s+\\d+.*$', '# chvt') | regex_replace('\\|\\s*tee\\s+/dev/tty\\d+', '') }}"
+      _translated_ks: "{{ _step_console | replace('%packages --excludedocs', '%packages --excludedocs\npowerpc-utils\npowerpc-utils-core') if 'powerpc-utils' not in _step_console else _step_console }}"
+  ansible.builtin.copy:
+      content: "{{ _translated_ks }}"
+      dest: "/var/www/html/{{ pmc_pao_install_ks_file }}"
+      mode: '0777'
+  delegate_to: "{{ groups['repo'][0] }}"
+
+- name: Remove any existing tftp boot folder in PXE server for this VM
+  run_once: true
+  ansible.builtin.file:
+      path: "{{ pmc_pao_install_dest_dir }}"
+      state: absent
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Calculate cutdir value
+  ansible.builtin.shell: set -o pipefail && echo "{{ pmc_pao_install_repo_dir }}" | tr '/' '\n' | grep -v "^$" | wc -l
+  register: pmc_pao_install_cut_dir
+  changed_when: false
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Download files from /boot and /ppc directory in Repository Server to the PXE server tftp path(hardware address)
+  run_once: true
+  ansible.builtin.shell: >-
+    wget -r -nv --show-progress --reject="index.html*" --no-parent -nH
+    --cut-dirs={{ pmc_pao_install_cut_dir.stdout | int + 1 }}
+    http://{{ hostvars[groups['repo'][0]].ansible_host }}:{{ pmc_pao_install_repo_port }}/{{ pmc_pao_install_repo_dir }}/boot/
+    -P {{ pmc_pao_install_dest_dir }}
+
+  changed_when: false
+  delegate_to: "{{ groups['pxe'][0] }}"
+  # noqa: command-instead-of-module wget
+
+- name: Download files from /boot and /ppc directory in Repository Server to the PXE server tftp path(hardware address)
+  run_once: true
+  ansible.builtin.shell: >-
+    wget -r -nv --show-progress --reject="index.html*" --no-parent -nH
+    --cut-dirs={{ pmc_pao_install_cut_dir.stdout | int }}
+    http://{{ hostvars[groups['repo'][0]].ansible_host }}:{{ pmc_pao_install_repo_port }}/{{ pmc_pao_install_repo_dir }}/ppc/
+    -P {{ pmc_pao_install_dest_dir }}
+
+  changed_when: false
+  delegate_to: "{{ groups['pxe'][0] }}"
+  # noqa: command-instead-of-module wget
+
+- name: Create netboot directory in PXE server under tftp path
+  run_once: true
+  ansible.builtin.command: >
+    grub2-mknetdir
+    --net-directory={{ pmc_pao_install_base_dir }}
+    --subdir={{ pmc_pao_install_mac_address }}/boot/grub/
+  changed_when: false
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Create grub.cfg and copy to boot directory in PXE server
+  run_once: true
+  ansible.builtin.template:
+      src: templates/grub_conf.j2
+      dest: "{{ pmc_pao_install_dest_dir }}/boot/grub/grub.cfg"
+      mode: "0777"
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Copy grub.cfg to PXE server boot directory
+  run_once: true
+  ansible.builtin.command: >
+    cp "{{ pmc_pao_install_dest_dir }}/boot/grub/grub.cfg"
+       "{{ pmc_pao_install_dest_dir }}/boot/grub/powerpc-ieee1275/grub.cfg-01-{{ pmc_pao_install_address }}"
+  changed_when: false
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Backup the dhcp file , if in case this blocks add any errors
+  run_once: true
+  ansible.builtin.command: cp /etc/dhcp/dhcpd.conf /tmp/dhcpd.conf
+  changed_when: false
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: DHCP block file to add lpar entry into dhcpd.conf
+  run_once: true
+  ansible.builtin.blockinfile:
+      dest: /etc/dhcp/dhcpd.conf
+      marker: "#{mark} Ansible module dhcp entry"
+      block: "{{ lookup('template', 'dhcpd_conf.j2') }}"
+      state: present
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Restart dhcp-server
+  run_once: true
+  ansible.builtin.systemd:
+      name: dhcpd
+      state: restarted
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Lparnetboot operation on target lpar # noqa: ignore-errors
+  run_once: true
+  connection: local
+  collections:
+      - ibm.power_hmc
+  powervm_lpar_instance:
+      hmc_host: "{{ hostvars['hmc_server'].ansible_host }}"
+      hmc_auth: "{{ pmc_pao_install_curr_hmc_auth }}"
+      system_name: "{{ pmc_pao_install_managed_system }}"
+      vm_name: "{{ pmc_pao_install_lpar_name }}"
+      install_settings:
+          vm_ip: "{{ pmc_pao_install_host_ip }}"
+          nim_ip: "{{ hostvars['pxe_server'].ansible_host }}"
+          nim_gateway: "{{ pmc_pao_install_host_gw }}"
+          nim_subnetmask: "{{ pmc_pao_install_host_netmask }}"
+          vm_mac: "{{ pmc_pao_install_mac_address }}"
+          timeout: 11
+      action: install_os
+  ignore_errors: true
+  delegate_to: "{{ groups['hmcs'][0] }}"
+
+- name: Revert the DHCP configuration changes in PXE server, take a backup of configuration file
+  run_once: true
+  ansible.builtin.command: cp /etc/dhcp/dhcpd.conf /tmp/dhcpd.conf
+  changed_when: false
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Block file
+  run_once: true
+  ansible.builtin.blockinfile:
+      dest: /etc/dhcp/dhcpd.conf
+      marker: "#{mark} Ansible module dhcp entry"
+      block: "{{ lookup('template', 'dhcpd_conf.j2') }}"
+      state: absent
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Restart dhcp-server
+  run_once: true
+  ansible.builtin.systemd:
+      name: dhcpd
+      state: restarted
+  when: pmc_pao_install_enable_dhcp | bool
+  delegate_to: "{{ groups['pxe'][0] }}"
+
+- name: Wait for TCP Port 22 to open on target LPAR (Lightweight socket poll)
+  run_once: true
+  ansible.builtin.wait_for:
+      host: "{{ pmc_pao_install_host_ip }}"
+      port: 22
+      state: started
+      delay: 300
+      timeout: 7200
+      sleep: 15
+  delegate_to: localhost
+
+- name: Wait for host SSH authentication after install
+  no_log: true
+  run_once: true
+  ansible.builtin.wait_for_connection:
+      delay: 5
+      timeout: 300
+      sleep: 5
+  vars:
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      ansible_host: "{{ pmc_pao_install_host_ip }}"
+      ansible_user: "{{ pmc_pao_install_host_user }}"
+      ansible_password: "{{ pmc_pao_install_host_password }}"
+      ansible_python_interpreter: "/usr/bin/python3"
+
+- name: Ensure system facts are gathered from the VM
+  no_log: true
+  run_once: true
+  ansible.builtin.setup:
+  vars:
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      ansible_user: "{{ pmc_pao_install_host_user }}"
+      ansible_password: "{{ pmc_pao_install_host_password }}"
+      ansible_python_interpreter: "/usr/bin/python3"
+  delegate_to: "{{ groups['vm'][0] }}"
+
+- name: Print OS info from the VM
+  run_once: true
+  ansible.builtin.debug:
+      msg: "Distribution: {{ ansible_facts['distribution'] }}, Version: {{ ansible_facts['distribution_version'] }}"
+  delegate_to: "{{ groups['vm'][0] }}"

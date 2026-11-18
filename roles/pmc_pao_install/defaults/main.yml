@@ -1,0 +1,40 @@
+---
+# Default variable values for ibm.power_hmc.pmc_pao_install
+# (Power Mission Control / PowerIQ Agentic Operations appliance installation)
+
+# Appliance release name, used to name the generated kickstart file (e.g. PMC1.0.0.0)
+pmc_pao_install_distro: "PMC1.0.0.0"
+
+# Path to the PMC ISO contents on the Repository (HTTP) server, e.g. repo/pmc-ppc64le
+pmc_pao_install_repo_dir: ""
+
+# Repository server HTTP port
+pmc_pao_install_repo_port: 80
+
+# Network name on PowerVM
+pmc_pao_install_network_name: "VLAN1-ETHERNET0"
+
+# Enable/Disable DHCP (required for Open Firmware BOOTP boot filename discovery)
+pmc_pao_install_enable_dhcp: true
+
+# Target appliance network details (no usable defaults, must be supplied)
+pmc_pao_install_host_ip: ""
+pmc_pao_install_host_gw: ""
+pmc_pao_install_host_subnet: ""
+pmc_pao_install_host_netmask: ""
+pmc_pao_install_dns_ip: ""
+pmc_pao_install_hostname: ""
+
+# LPAR details (no usable defaults, must be supplied)
+pmc_pao_install_lpar_name: ""
+pmc_pao_install_managed_system: ""
+
+# LPAR resources
+pmc_pao_install_proc: 2
+pmc_pao_install_mem: 4096
+pmc_pao_install_disk_size: 30000
+
+# Appliance login used after installation. The password is intentionally not
+# defaulted: supply it from an environment variable or an ansible-vault file.
+pmc_pao_install_host_user: "pmcroot"
+pmc_pao_install_host_password: ""

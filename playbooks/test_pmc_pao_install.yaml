@@ -1,0 +1,116 @@
+---
+- name: Stage 1 - Deploy PMC PAO appliance LPAR via Network Netboot
+  hosts: vm
+  collections:
+    - ibm.power_hmc
+  gather_facts: false
+  vars_files:
+    - vars/pmc_pao_install_network.yml
+  tags:
+    - stage1
+    - provision
+    - install
+  roles:
+    - role: pmc_pao_install
+      vars:
+        # PMC ISO Repository
+        pmc_pao_install_distro: "PMC1.0.0.0"
+        pmc_pao_install_repo_dir: "repo/pmc-ppc64le"
+        pmc_pao_install_repo_port: 80
+
+        # Target appliance network details come from vars/pmc_pao_install_network.yml
+        # Appliance login; password is read from the PMC_PAO_PASSWORD environment variable
+        pmc_pao_install_host_user: "pmcroot"
+        pmc_pao_install_host_password: "{{ lookup('ansible.builtin.env', 'PMC_PAO_PASSWORD') }}"
+
+        # LPAR hardware resources
+        pmc_pao_install_lpar_name: "pmc-lpar-01"
+        pmc_pao_install_managed_system: "managed-system-name"
+        pmc_pao_install_network_name: "VLAN1-ETHERNET0"
+        pmc_pao_install_mem: 4096
+        pmc_pao_install_proc: 2
+        pmc_pao_install_disk_size: 30000
+
+- name: Stage 2 - Post-Provisioning Appliance Initialization & Health Check
+  hosts: vm
+  gather_facts: false
+  become: true
+  tags:
+    - stage2
+    - configure
+    - init
+  vars_files:
+    - vars/pmc_pao_install_network.yml
+  vars:
+    # One password (from the PMC_PAO_PASSWORD environment variable) is used for the
+    # pmcroot login and for the appliance DB and Kafka passwords.
+    pmc_password: "{{ lookup('ansible.builtin.env', 'PMC_PAO_PASSWORD') }}"
+    ansible_user: "pmcroot"
+    ansible_password: "{{ pmc_password }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    target_hostname: "{{ pmc_pao_install_hostname }}"
+    appliance_db_password: "{{ pmc_password }}"
+    appliance_kafka_password: "{{ pmc_password }}"
+  tasks:
+    - name: Validate that PMC_PAO_PASSWORD is set in the environment
+      ansible.builtin.assert:
+        that: pmc_password | length > 0
+        fail_msg: "Environment variable PMC_PAO_PASSWORD is not set on the Ansible controller."
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+    - name: Wait for LPAR to boot and become reachable over SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 900
+        delay: 5
+      become: false
+      vars:
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        ansible_python_interpreter: "/usr/bin/python3"
+
+    - name: Configure appliance hostname (per GA doc)
+      ansible.builtin.command:
+        cmd: "hostnamectl set-hostname {{ target_hostname }}"
+      when: (target_hostname | length) > 0
+      changed_when: true
+
+    - name: Check if PostgreSQL database is already initialized
+      ansible.builtin.stat:
+        path: /var/lib/pgsql/data/PG_VERSION
+      register: db_status
+
+    - name: Initialize PostgreSQL Database, Kafka Messaging, and Start ManageIQ Core
+      when: not db_status.stat.exists
+      no_log: true
+      ansible.builtin.shell: |
+        source /etc/default/evm
+        appliance_console_cli --internal --region 0 --dbname vmdb_production --username root --password "{{ appliance_db_password }}"
+        appliance_console_cli --message-server-config --message-server-host localhost --message-server-port 9093 --message-keystore-username admin --message-keystore-password "{{ appliance_kafka_password }}"
+        systemctl enable --now kafka.service
+        appliance_console_cli --server=start
+        systemctl enable --now evmserverd.service httpd.service
+      args:
+        executable: /bin/bash
+      register: init_result
+      changed_when: true
+
+    - name: Ensure all appliance services are running
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - kafka
+        - evmserverd
+        - httpd
+
+    - name: Verify Web GUI is live and responding (Port 443)
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/dashboard/login?pmc_login_loader=1"
+        validate_certs: false
+        status_code: 200
+      register: web_status
+      until: web_status.status == 200
+      retries: 30
+      delay: 10

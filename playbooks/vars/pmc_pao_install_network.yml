@@ -1,0 +1,10 @@
+---
+# Target appliance network configuration, shared by Stage 1 (netboot install)
+# and Stage 2 (hostnamectl set-hostname). Non-secret; the password is read
+# from the PMC_PAO_PASSWORD environment variable.
+pmc_pao_install_host_ip: "192.0.2.10"
+pmc_pao_install_hostname: "pmc-vm1.example.com"
+pmc_pao_install_host_gw: "192.0.2.1"
+pmc_pao_install_host_subnet: "192.0.2.0"
+pmc_pao_install_host_netmask: "255.255.255.0"
+pmc_pao_install_dns_ip: "192.0.2.2"

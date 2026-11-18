@@ -1,0 +1,15 @@
+subnet {{ pmc_pao_install_host_subnet }} netmask {{ pmc_pao_install_host_netmask }} {
+    allow bootp;
+    option routers {{ pmc_pao_install_host_gw }};
+    option domain-name-servers {{ pmc_pao_install_dns_ip }};
+    group {
+        next-server {{ hostvars[groups['pxe'][0]].ansible_host }};
+        filename "{{ pmc_pao_install_core_file_path }}";
+        host {{ pmc_pao_install_hostname }} {
+            hardware ethernet {{ pmc_pao_install_hardware_ethernet }};
+            fixed-address {{ pmc_pao_install_host_ip }};
+            option host-name {{ pmc_pao_install_lpar_name }};
+            option tftp-server-name "{{ hostvars[groups['pxe'][0]].ansible_host }}";
+        }
+    }
+}
